@@ -1,6 +1,8 @@
 import json
 import os
 import time
+import requests
+import socket
 from typing import Dict, List
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,6 +13,10 @@ from pydantic import BaseModel
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 RABBIT_URL = os.getenv("RABBIT_URL")
+CMS_URL = os.getenv("CMS_URL", "http://cms-soap:9000/soap")
+ROS_URL = os.getenv("ROS_URL", "http://ros-rest:9100/optimize-route")
+WMS_HOST = os.getenv("WMS_HOST", "wms-tcp")
+WMS_PORT = int(os.getenv("WMS_PORT", "9200"))
 
 app = FastAPI(title="SwiftLogistics API Gateway")
 
@@ -148,3 +154,48 @@ async def internal_status(order_id: str, body: StatusUpdate):
                 pass
 
     return {"ok": True}
+
+@app.post("/internal/cms/soap")
+def internal_cms_soap(payload: dict):
+    """
+    UI -> api-gateway -> CMS SOAP mock
+    payload: { "order_id": "ORD-...", "client_id": "C001" }
+    """
+    order_id = payload.get("order_id", "ORD-DEMO")
+    client_id = payload.get("client_id", "C001")
+
+    xml = f"""<?xml version="1.0"?>
+<Envelope>
+  <Body>
+    <CreateOrder>
+      <OrderId>{order_id}</OrderId>
+      <ClientId>{client_id}</ClientId>
+    </CreateOrder>
+  </Body>
+</Envelope>
+"""
+    r = requests.post(CMS_URL, data=xml.encode("utf-8"), headers={"Content-Type": "text/xml"}, timeout=5)
+    return {"status_code": r.status_code, "response_xml": r.text}
+
+
+@app.post("/internal/ros/optimize")
+def internal_ros_optimize(payload: dict):
+    """
+    UI -> api-gateway -> ROS REST mock
+    payload: { "order_id": "ORD-..." }
+    """
+    r = requests.post(ROS_URL, json=payload, timeout=5)
+    return {"status_code": r.status_code, "response_json": r.json()}
+
+
+@app.post("/internal/wms/send")
+def internal_wms_send(payload: dict):
+    """
+    UI -> api-gateway -> WMS TCP mock
+    payload: { "message": "ADD_PACKAGE|ORD-..." }
+    """
+    message = (payload.get("message") or "ADD_PACKAGE|ORD-DEMO").strip() + "\n"
+    with socket.create_connection((WMS_HOST, WMS_PORT), timeout=5) as s:
+        s.sendall(message.encode("utf-8"))
+        data = s.recv(1024).decode("utf-8", errors="ignore").strip()
+    return {"reply": data}

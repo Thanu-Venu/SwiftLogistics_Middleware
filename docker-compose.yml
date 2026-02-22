@@ -51,6 +51,10 @@ services:
     environment:
       DATABASE_URL: postgresql://admin:admin@postgres:5432/logistics
       RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      CMS_URL: http://cms-soap:9000/soap
+      ROS_URL: http://ros-rest:9100/optimize-route
+      WMS_HOST: wms-tcp
+      WMS_PORT: "9200"
     depends_on:
       - rabbitmq
       - postgres
