@@ -67,22 +67,25 @@ def process_message(body: bytes):
     order_id = data["order_id"]
 
     set_status(order_id, "PROCESSING")
-    time.sleep(2)
+    time.sleep(3)
 
     set_status(order_id, "CMS_CALLING")
+    time.sleep(3)
     call_cms_soap(order_id)
     set_status(order_id, "CMS_OK")
-    time.sleep(2)
+    
 
     set_status(order_id, "ROS_CALLING")
+    time.sleep(3)
     call_ros_rest(order_id)
     set_status(order_id, "ROS_OK")
-    time.sleep(2)
+    
 
     set_status(order_id, "WMS_CALLING")
+    time.sleep(3)
     call_wms_tcp(order_id)
     set_status(order_id, "WMS_OK")
-    time.sleep(2)
+    
 
     set_status(order_id, "READY_FOR_DRIVER")
     time.sleep(2)

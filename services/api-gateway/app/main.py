@@ -2,6 +2,7 @@ import json
 import os
 import time
 from typing import Dict, List
+from fastapi.middleware.cors import CORSMiddleware
 
 import pika
 import psycopg2
@@ -12,6 +13,14 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 RABBIT_URL = os.getenv("RABBIT_URL")
 
 app = FastAPI(title="SwiftLogistics API Gateway")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^http://.*:5173$",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Simple in-memory WS subscribers (demo) ---
 subscribers: Dict[str, List[WebSocket]] = {}
