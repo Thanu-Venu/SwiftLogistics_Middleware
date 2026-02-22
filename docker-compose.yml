@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: logistics
+    ports:
+      - "5432:5432"
+    restart: always
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  cms-soap-mock:
+    build: ./services/cms-soap-mock
+    container_name: cms-soap
+    ports:
+      - "9000:9000"
+    restart: always
+
+  ros-rest-mock:
+    build: ./services/ros-rest-mock
+    container_name: ros-rest
+    ports:
+      - "9100:9100"
+    restart: always
+
+  wms-tcp-mock:
+    build: ./services/wms-tcp-mock
+    container_name: wms-tcp
+    ports:
+      - "9200:9200"
+    restart: always
+
+  api-gateway:
+    build: ./services/api-gateway
+    container_name: api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://admin:admin@postgres:5432/logistics
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+      - postgres
+      - cms-soap-mock
+      - ros-rest-mock
+      - wms-tcp-mock
+    restart: always
+
+  worker:
+    build: ./services/worker
+    container_name: worker
+    environment:
+      DATABASE_URL: postgresql://admin:admin@postgres:5432/logistics
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      CMS_URL: http://cms-soap:9000/soap
+      ROS_URL: http://ros-rest:9100/optimize-route
+      WMS_HOST: wms-tcp
+      WMS_PORT: "9200"
+    depends_on:
+      - rabbitmq
+      - postgres
+      - cms-soap-mock
+      - ros-rest-mock
+      - wms-tcp-mock
+    restart: always
+
+volumes:
+  pgdata:

@@ -1,0 +1,141 @@
+import json
+import os
+import time
+from typing import Dict, List
+
+import pika
+import psycopg2
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+RABBIT_URL = os.getenv("RABBIT_URL")
+
+app = FastAPI(title="SwiftLogistics API Gateway")
+
+# --- Simple in-memory WS subscribers (demo) ---
+subscribers: Dict[str, List[WebSocket]] = {}
+
+
+def db_conn():
+    return psycopg2.connect(DATABASE_URL)
+
+
+def init_db():
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS orders (
+                    id TEXT PRIMARY KEY,
+                    client_id TEXT NOT NULL,
+                    payload JSONB NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at BIGINT NOT NULL
+                );
+                """
+            )
+            conn.commit()
+
+
+def publish_order_created(order_id: str, client_id: str, payload: dict):
+    params = pika.URLParameters(RABBIT_URL)
+    connection = pika.BlockingConnection(params)
+    channel = connection.channel()
+    channel.queue_declare(queue="order.created", durable=True)
+
+    msg = {"order_id": order_id, "client_id": client_id, "payload": payload}
+    channel.basic_publish(
+        exchange="",
+        routing_key="order.created",
+        body=json.dumps(msg).encode("utf-8"),
+        properties=pika.BasicProperties(delivery_mode=2),  # persistent
+    )
+    connection.close()
+
+
+class CreateOrderReq(BaseModel):
+    client_id: str
+    items: list
+    destination: str
+
+
+@app.on_event("startup")
+def startup():
+    init_db()
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
+@app.post("/orders")
+def create_order(req: CreateOrderReq):
+    order_id = f"ORD-{int(time.time()*1000)}"
+    created_at = int(time.time())
+
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO orders (id, client_id, payload, status, created_at) VALUES (%s,%s,%s,%s,%s)",
+                (order_id, req.client_id, json.dumps(req.dict()), "PENDING", created_at),
+            )
+            conn.commit()
+
+    publish_order_created(order_id, req.client_id, req.dict())
+    return {"order_id": order_id, "status": "PENDING"}
+
+
+@app.get("/orders/{order_id}")
+def get_order(order_id: str):
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, client_id, payload, status, created_at FROM orders WHERE id=%s", (order_id,))
+            row = cur.fetchone()
+    if not row:
+        return {"error": "not_found"}
+    return {"id": row[0], "client_id": row[1], "payload": row[2], "status": row[3], "created_at": row[4]}
+
+
+@app.websocket("/ws/orders/{order_id}")
+async def ws_order(websocket: WebSocket, order_id: str):
+    await websocket.accept()
+    subscribers.setdefault(order_id, []).append(websocket)
+    try:
+        while True:
+            # keep alive (client can send pings)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        subscribers.get(order_id, []).remove(websocket)
+
+
+# Worker will call this to push realtime updates (simple + demo-friendly)
+class StatusUpdate(BaseModel):
+    status: str
+
+
+@app.post("/internal/orders/{order_id}/status")
+async def internal_status(order_id: str, body: StatusUpdate):
+    with db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE orders SET status=%s WHERE id=%s", (body.status, order_id))
+            conn.commit()
+
+    # push to websocket subscribers
+    if order_id in subscribers:
+        dead = []
+        for ws in subscribers[order_id]:
+            try:
+                await ws.send_text(body.status)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            try:
+                subscribers[order_id].remove(ws)
+            except ValueError:
+                pass
+
+    return {"ok": True}
