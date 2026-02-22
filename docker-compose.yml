@@ -55,6 +55,9 @@ services:
       ROS_URL: http://ros-rest:9100/optimize-route
       WMS_HOST: wms-tcp
       WMS_PORT: "9200"
+      JWT_SECRET: "change_this_to_a_long_random_string"
+      JWT_ALG: "HS256"
+      ACCESS_TOKEN_EXPIRE_MIN: "60"
     depends_on:
       - rabbitmq
       - postgres

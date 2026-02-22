@@ -3,15 +3,16 @@ import os
 import time
 import requests
 import socket
+from app.db import db_conn
+from app.routers.auth import router as auth_router
+from app.routers.orders import router as orders_router
 from typing import Dict, List
 from fastapi.middleware.cors import CORSMiddleware
 
 import pika
-import psycopg2
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-DATABASE_URL = os.getenv("DATABASE_URL")
 RABBIT_URL = os.getenv("RABBIT_URL")
 CMS_URL = os.getenv("CMS_URL", "http://cms-soap:9000/soap")
 ROS_URL = os.getenv("ROS_URL", "http://ros-rest:9100/optimize-route")
@@ -19,6 +20,9 @@ WMS_HOST = os.getenv("WMS_HOST", "wms-tcp")
 WMS_PORT = int(os.getenv("WMS_PORT", "9200"))
 
 app = FastAPI(title="SwiftLogistics API Gateway")
+
+app.include_router(auth_router)
+app.include_router(orders_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,13 +36,10 @@ app.add_middleware(
 subscribers: Dict[str, List[WebSocket]] = {}
 
 
-def db_conn():
-    return psycopg2.connect(DATABASE_URL)
-
-
 def init_db():
     with db_conn() as conn:
         with conn.cursor() as cur:
+            # orders table (already)
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS orders (
@@ -50,8 +51,21 @@ def init_db():
                 );
                 """
             )
-            conn.commit()
+            # users table
+            cur.execute('CREATE EXTENSION IF NOT EXISTS "pgcrypto";')
 
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'client',
+                    client_id TEXT NOT NULL UNIQUE,
+                    created_at BIGINT NOT NULL DEFAULT (extract(epoch from now())::bigint)
+                );
+                """
+            )
+            conn.commit()
 
 def publish_order_created(order_id: str, client_id: str, payload: dict):
     params = pika.URLParameters(RABBIT_URL)
@@ -70,7 +84,6 @@ def publish_order_created(order_id: str, client_id: str, payload: dict):
 
 
 class CreateOrderReq(BaseModel):
-    client_id: str
     items: list
     destination: str
 
@@ -85,22 +98,26 @@ def health():
     return {"ok": True}
 
 
+from fastapi import Depends
+from app.deps import get_current_user
+
 @app.post("/orders")
-def create_order(req: CreateOrderReq):
+def create_order(req: CreateOrderReq, user=Depends(get_current_user)):
     order_id = f"ORD-{int(time.time()*1000)}"
     created_at = int(time.time())
+
+    client_id = user["client_id"]  # ✅ from JWT
 
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO orders (id, client_id, payload, status, created_at) VALUES (%s,%s,%s,%s,%s)",
-                (order_id, req.client_id, json.dumps(req.dict()), "PENDING", created_at),
+                (order_id, client_id, json.dumps(req.dict()), "PENDING", created_at),
             )
             conn.commit()
 
-    publish_order_created(order_id, req.client_id, req.dict())
+    publish_order_created(order_id, client_id, req.dict())
     return {"order_id": order_id, "status": "PENDING"}
-
 
 @app.get("/orders/{order_id}")
 def get_order(order_id: str):
