@@ -6,6 +6,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 
 @router.get("/my")
 def my_orders(user=Depends(get_current_user)):
+    client_id = user["client_id"]  # ✅ from JWT
     # user["client_id"] is like C001
     with db_conn() as conn:
         with conn.cursor() as cur:

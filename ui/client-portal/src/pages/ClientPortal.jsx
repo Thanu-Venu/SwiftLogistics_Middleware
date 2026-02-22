@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE } from "../config";
+import { api } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 
 const badgeClass = (s) => {
   if (!s) return "bg-gray-100 text-gray-700";
@@ -10,7 +12,9 @@ const badgeClass = (s) => {
 };
 
 export default function ClientPortal() {
-  const [clientId, setClientId] = useState("C001");
+  const { user } = useAuth(); // ✅ from JWT (/auth/me)
+  const clientId = user?.client_id; // ✅ no manual input
+
   const [destination, setDestination] = useState("Colombo");
   const [sku, setSku] = useState("A1");
   const [qty, setQty] = useState(2);
@@ -27,6 +31,9 @@ export default function ClientPortal() {
   const wsUrl = useMemo(() => {
     if (!orderId) return "";
     const base = API_BASE.replace(/^http/, "ws");
+    // Optional: if later you secure WS, you can append token as query param here
+    // const token = localStorage.getItem("token");
+    // return `${base}/ws/orders/${orderId}?token=${encodeURIComponent(token || "")}`;
     return `${base}/ws/orders/${orderId}`;
   }, [orderId]);
 
@@ -85,22 +92,17 @@ export default function ClientPortal() {
     disconnectWs();
 
     try {
-      const res = await fetch(`${API_BASE}/orders`, {
+      if (!clientId) throw new Error("No client_id found. Please login again.");
+
+      // ✅ JWT protected endpoint
+      const data = await api("/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_id: clientId.trim(),
           destination: destination.trim(),
           items: [{ sku: sku.trim(), qty: Number(qty) || 1 }],
         }),
       });
 
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`Create failed: ${res.status} ${t}`);
-      }
-
-      const data = await res.json();
       setOrderId(data.order_id);
       addStatus(data.status || "PENDING");
     } catch (e) {
@@ -114,12 +116,8 @@ export default function ClientPortal() {
     if (!orderId) return;
     setErr("");
     try {
-      const res = await fetch(`${API_BASE}/orders/${orderId}`);
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`Fetch failed: ${res.status} ${t}`);
-      }
-      const data = await res.json();
+      // If you want this protected too, keep using api()
+      const data = await api(`/orders/${orderId}`);
       if (data?.status) addStatus(data.status);
     } catch (e) {
       setErr(e.message || "Unknown error");
@@ -142,6 +140,10 @@ export default function ClientPortal() {
           <p className="mt-1 text-sm text-gray-600">
             Create an order and track live status updates (WebSocket) from the middleware pipeline.
           </p>
+          <p className="mt-2 text-xs text-gray-500">
+            Logged in as: <span className="font-mono">{user?.email || "-"}</span> | Client:
+            <span className="font-mono"> {clientId || "-"}</span>
+          </p>
         </div>
 
         <div className="text-sm text-gray-600">
@@ -156,15 +158,7 @@ export default function ClientPortal() {
           <h3 className="text-lg font-bold">Create Order</h3>
 
           <div className="mt-4 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Client ID</label>
-              <input
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className="mt-1 w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring"
-                placeholder="C001"
-              />
-            </div>
+            {/* ✅ Client ID removed - comes from JWT */}
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Destination</label>
@@ -200,11 +194,17 @@ export default function ClientPortal() {
 
             <button
               onClick={createOrder}
-              disabled={loading}
+              disabled={loading || !clientId}
               className="w-full rounded-xl bg-black text-white py-2 font-semibold hover:opacity-90 disabled:opacity-50"
             >
               {loading ? "Creating..." : "Create Order"}
             </button>
+
+            {!clientId && (
+              <div className="rounded-xl bg-yellow-50 text-yellow-800 px-3 py-2 text-sm">
+                Client ID not available. Please re-login.
+              </div>
+            )}
 
             {err && (
               <div className="rounded-xl bg-red-50 text-red-700 px-3 py-2 text-sm">
