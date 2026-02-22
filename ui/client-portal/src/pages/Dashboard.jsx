@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const nav = useNavigate();
+
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -37,13 +39,29 @@ export default function Dashboard() {
     return { total, top };
   }, [orders]);
 
+  function handleLogout() {
+    logout();
+    nav("/login", { replace: true });
+  }
+
   return (
     <div className="space-y-5">
       <div className="bg-white border rounded-2xl p-5">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-gray-600 mt-1 text-sm">
-          Welcome{user?.email ? `, ${user.email}` : ""} 👋
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Dashboard</h1>
+            <p className="text-gray-600 mt-1 text-sm">
+              Welcome{user?.email ? `, ${user.email}` : ""} 👋
+            </p>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+          >
+            Logout
+          </button>
+        </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="border rounded-xl p-4 bg-gray-50">
@@ -64,13 +82,19 @@ export default function Dashboard() {
 
         <div className="mt-4 flex flex-wrap gap-2">
           <Link className="px-3 py-2 rounded-lg bg-black text-white" to="/">
-            Go to Client Portal
+            Client Portal
           </Link>
           <Link className="px-3 py-2 rounded-lg border bg-white" to="/my-orders">
             My Orders
           </Link>
-          <Link className="px-3 py-2 rounded-lg border bg-white" to="/create-order">
-            Place Order
+          <Link className="px-3 py-2 rounded-lg border bg-white" to="/cms">
+            CMS
+          </Link>
+          <Link className="px-3 py-2 rounded-lg border bg-white" to="/ros">
+            ROS
+          </Link>
+          <Link className="px-3 py-2 rounded-lg border bg-white" to="/wms">
+            WMS
           </Link>
         </div>
       </div>
