@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 
-function fmtEpoch(sec) {
-  if (!sec) return "-";
-  const d = new Date(sec * 1000);
+function fmtTs(ts) {
+  if (!ts) return "-";
+  const n = Number(ts);
+  if (!Number.isFinite(n)) return "-";
+
+  // 13 digits => ms, 10 digits => sec
+  const d = n > 1e12 ? new Date(n) : new Date(n * 1000);
+  if (isNaN(d.getTime())) return "-";
   return d.toLocaleString();
 }
 
@@ -110,7 +115,7 @@ export default function MyOrders() {
 
                 <div className="flex items-center gap-3">
                   <span className="text-xs px-2 py-1 rounded-full bg-gray-100">
-                    {fmtEpoch(o.created_at)}
+                    {fmtTs(o.created_at)}
                   </span>
                   <span className="text-sm font-semibold">{o.status}</span>
                 </div>

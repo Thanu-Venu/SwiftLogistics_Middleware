@@ -66,9 +66,11 @@ services:
       - wms-tcp-mock
     restart: always
 
+  # Consumer worker (main queue)
   worker:
     build: ./services/worker
     container_name: worker
+    command: ["python", "worker.py", "consume"]
     environment:
       DATABASE_URL: postgresql://admin:admin@postgres:5432/logistics
       RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
@@ -76,12 +78,32 @@ services:
       ROS_URL: http://ros-rest:9100/optimize-route
       WMS_HOST: wms-tcp
       WMS_PORT: "9200"
+      MAX_RETRIES: "5"
+      RETRY_TTL_MS: "5000"
+      DEMO_DELAYS: "true"
+      PYTHONUNBUFFERED: "1"
     depends_on:
       - rabbitmq
       - postgres
       - cms-soap-mock
       - ros-rest-mock
       - wms-tcp-mock
+    restart: always
+
+  # Outbox publisher (DB outbox -> rabbit main)
+  outbox_publisher:
+    build: ./services/worker
+    container_name: outbox-publisher
+    command: ["python", "worker.py", "outbox"]
+    environment:
+      DATABASE_URL: postgresql://admin:admin@postgres:5432/logistics
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      MAX_RETRIES: "5"
+      RETRY_TTL_MS: "5000"
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      - rabbitmq
+      - postgres
     restart: always
 
 volumes:
