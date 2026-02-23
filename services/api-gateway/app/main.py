@@ -12,6 +12,8 @@ import pika
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from app.routers.internal_cms import router as internal_cms_router
+from app.routers.internal_ros import router as internal_ros_router
+from app.routers.internal_wms import router as internal_wms_router
 
 RABBIT_URL = os.getenv("RABBIT_URL")
 CMS_URL = os.getenv("CMS_URL", "http://cms-soap:9000/soap")
@@ -24,6 +26,8 @@ app = FastAPI(title="SwiftLogistics API Gateway")
 app.include_router(auth_router)
 app.include_router(orders_router)
 app.include_router(internal_cms_router)
+app.include_router(internal_ros_router)
+app.include_router(internal_wms_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex="^http://.*:5173$",
@@ -171,25 +175,3 @@ async def internal_status(order_id: str, body: StatusUpdate):
                 pass
 
     return {"ok": True}
-
-@app.post("/internal/ros/optimize")
-def internal_ros_optimize(payload: dict):
-    """
-    UI -> api-gateway -> ROS REST mock
-    payload: { "order_id": "ORD-..." }
-    """
-    r = requests.post(ROS_URL, json=payload, timeout=5)
-    return {"status_code": r.status_code, "response_json": r.json()}
-
-
-@app.post("/internal/wms/send")
-def internal_wms_send(payload: dict):
-    """
-    UI -> api-gateway -> WMS TCP mock
-    payload: { "message": "ADD_PACKAGE|ORD-..." }
-    """
-    message = (payload.get("message") or "ADD_PACKAGE|ORD-DEMO").strip() + "\n"
-    with socket.create_connection((WMS_HOST, WMS_PORT), timeout=5) as s:
-        s.sendall(message.encode("utf-8"))
-        data = s.recv(1024).decode("utf-8", errors="ignore").strip()
-    return {"reply": data}

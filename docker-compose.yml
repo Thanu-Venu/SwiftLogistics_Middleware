@@ -41,6 +41,7 @@ services:
     container_name: wms-tcp
     ports:
       - "9200:9200"
+      - "9201:9201"
     restart: always
 
   api-gateway:
@@ -59,6 +60,8 @@ services:
       JWT_ALG: "HS256"
       ACCESS_TOKEN_EXPIRE_MIN: "60"
       CMS_INTERNAL: "http://cms-soap:9000"
+      WMS_INTERNAL: "http://wms-tcp:9201"
+      ROS_INTERNAL: "http://ros-rest:9100"
     depends_on:
       - rabbitmq
       - postgres
