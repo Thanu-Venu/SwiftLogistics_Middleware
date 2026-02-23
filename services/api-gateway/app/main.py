@@ -8,10 +8,10 @@ from app.routers.auth import router as auth_router
 from app.routers.orders import router as orders_router
 from typing import Dict, List
 from fastapi.middleware.cors import CORSMiddleware
-
 import pika
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+from app.routers.internal_cms import router as internal_cms_router
 
 RABBIT_URL = os.getenv("RABBIT_URL")
 CMS_URL = os.getenv("CMS_URL", "http://cms-soap:9000/soap")
@@ -23,10 +23,10 @@ app = FastAPI(title="SwiftLogistics API Gateway")
 
 app.include_router(auth_router)
 app.include_router(orders_router)
-
+app.include_router(internal_cms_router)
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^http://.*:5173$",
+    allow_origin_regex="^http://.*:5173$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -171,29 +171,6 @@ async def internal_status(order_id: str, body: StatusUpdate):
                 pass
 
     return {"ok": True}
-
-@app.post("/internal/cms/soap")
-def internal_cms_soap(payload: dict):
-    """
-    UI -> api-gateway -> CMS SOAP mock
-    payload: { "order_id": "ORD-...", "client_id": "C001" }
-    """
-    order_id = payload.get("order_id", "ORD-DEMO")
-    client_id = payload.get("client_id", "C001")
-
-    xml = f"""<?xml version="1.0"?>
-<Envelope>
-  <Body>
-    <CreateOrder>
-      <OrderId>{order_id}</OrderId>
-      <ClientId>{client_id}</ClientId>
-    </CreateOrder>
-  </Body>
-</Envelope>
-"""
-    r = requests.post(CMS_URL, data=xml.encode("utf-8"), headers={"Content-Type": "text/xml"}, timeout=5)
-    return {"status_code": r.status_code, "response_xml": r.text}
-
 
 @app.post("/internal/ros/optimize")
 def internal_ros_optimize(payload: dict):
