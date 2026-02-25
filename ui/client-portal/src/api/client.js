@@ -1,38 +1,44 @@
-const API_BASE = (import.meta && import.meta.env && import.meta.env.VITE_API_BASE) || "http://localhost:8000";
+import { API_BASE } from "../config";
 
 export function getToken() {
-  return localStorage.getItem("token");
+  return localStorage.getItem("access_token");
 }
 
-export function setToken(token) {
-  localStorage.setItem("token", token);
+export function setToken(t) {
+  if (t) localStorage.setItem("access_token", t);
 }
 
 export function clearToken() {
-  localStorage.removeItem("token");
+  localStorage.removeItem("access_token");
 }
 
 export async function api(path, options = {}) {
-  const headers = new Headers(options.headers || {});
-  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
   const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
 
-  const text = await res.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
+  // ✅ attach bearer token
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401) {
+    // token invalid/expired -> wipe
+    clearToken();
   }
 
   if (!res.ok) {
-    const msg = (data && data.detail) || (data && data.error) || res.statusText;
-    throw new Error(msg);
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
   }
 
-  return data;
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) return res.json();
+  return res.text();
 }

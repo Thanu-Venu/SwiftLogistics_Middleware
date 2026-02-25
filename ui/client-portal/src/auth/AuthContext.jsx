@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { api, setToken, clearToken, getToken } from "../api/client";
 
+const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const Ctx = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -30,12 +31,26 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function login(email, password) {
-    const res = await api("/auth/login", {
+    const r = await fetch(`${API}/auth/login`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    setToken(res.access_token);
+
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(t || "Login failed");
+    }
+
+    const data = await r.json();
+
+    // ✅ store token via helper
+    setToken(data.access_token);
+
+    // ✅ immediately load /me (optional but good UX)
     await refreshMe();
+
+    return data;
   }
 
   async function register(client_id, email, password) {
