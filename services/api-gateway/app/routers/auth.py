@@ -9,7 +9,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register")
 def register(body: RegisterReq):
-    # bcrypt max length guard (bytes)
     pw_len = len(body.password.encode("utf-8")) if isinstance(body.password, str) else -1
     if pw_len > 72:
         raise HTTPException(status_code=400, detail=f"Password too long: {pw_len} bytes (max 72)")
@@ -18,7 +17,6 @@ def register(body: RegisterReq):
 
     with db_conn() as conn:
         with conn.cursor() as cur:
-            # unique checks
             cur.execute("SELECT 1 FROM users WHERE email=%s", (body.email,))
             if cur.fetchone():
                 raise HTTPException(status_code=409, detail="Email already exists")
@@ -40,18 +38,21 @@ def register(body: RegisterReq):
 def login(body: LoginReq):
     with db_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT password_hash, client_id FROM users WHERE email=%s", (body.email,))
+            cur.execute(
+                "SELECT password_hash, client_id, role FROM users WHERE email=%s",
+                (body.email,),
+            )
             row = cur.fetchone()
 
     if not row:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    password_hash, client_id = row[0], row[1]
+    password_hash, client_id, role = row
 
     if not verify_password(body.password, password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = create_access_token(subject=client_id)  # sub = C001
+    token = create_access_token(subject=client_id, role=role, email=body.email)
     return {"access_token": token, "token_type": "bearer"}
 
 

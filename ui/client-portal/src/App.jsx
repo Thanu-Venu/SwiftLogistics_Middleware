@@ -14,6 +14,9 @@ import Register from "./pages/Register";
 
 import RequireAuth from "./auth/RequireAuth";
 
+import Driver from "./pages/Driver";
+import Admin from "./pages/Admin";
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -21,6 +24,8 @@ export default function App() {
         {/* ✅ Public routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/driver" element={<Driver />} />
+        <Route path="/admin" element={<Admin />} />
 
         {/* ✅ Protected routes */}
         <Route element={<RequireAuth />}>

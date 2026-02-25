@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-
+const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 export default function Login() {
   const { login } = useAuth();
   const nav = useNavigate();
@@ -12,17 +12,33 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setErr("");
-    setLoading(true);
-    try {
-      await login(email.trim(), password);
-      nav("/dashboard"); // ✅ after login
-    } catch (e2) {
-      setErr(e2.message || "Login failed");
-    } finally {
-      setLoading(false);
-    }
+  e.preventDefault();
+  setErr("");
+  setLoading(true);
+  try {
+    await login(email.trim(), password);
+
+    // fetch /me to know role
+    const token = localStorage.getItem("access_token");
+    if (!token) throw new Error("Token missing after login");
+    const r = await fetch(`${API}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+  });
+    if (!r.ok) {
+      const errBody = await r.text();
+      console.log("LOGIN ERROR:", errBody);
+      throw new Error(errBody || "Login failed");
+   }
+    const me = await r.json();
+
+    if (me.role === "admin") nav("/admin");
+    else if (me.role === "driver") nav("/driver");
+    else nav("/dashboard"); // client
+  } catch (e2) {
+    setErr(e2.message || "Login failed");
+  } finally {
+    setLoading(false);
+  }
   }
 
   return (
