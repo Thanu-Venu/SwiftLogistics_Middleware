@@ -56,12 +56,16 @@ services:
       ROS_URL: http://ros-rest:9100/optimize-route
       WMS_HOST: wms-tcp
       WMS_PORT: "9200"
-      JWT_SECRET: "change_this_to_a_long_random_string"
-      JWT_ALG: "HS256"
-      ACCESS_TOKEN_EXPIRE_MIN: "60"
+
+      # ✅ JWT config (ONLY THESE)
+      SECRET_KEY: "change_this_to_a_long_random_string"
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+
       CMS_INTERNAL: "http://cms-soap:9000"
       WMS_INTERNAL: "http://wms-tcp:9201"
       ROS_INTERNAL: "http://ros-rest:9100"
+
     depends_on:
       - rabbitmq
       - postgres
@@ -70,7 +74,6 @@ services:
       - wms-tcp-mock
     restart: always
 
-  # Consumer worker (main queue)
   worker:
     build: ./services/worker
     container_name: worker
@@ -94,7 +97,6 @@ services:
       - wms-tcp-mock
     restart: always
 
-  # Outbox publisher (DB outbox -> rabbit main)
   outbox_publisher:
     build: ./services/worker
     container_name: outbox-publisher

@@ -1,16 +1,16 @@
-import os
-import time
-from jose import jwt, JWTError
+from datetime import datetime, timedelta, timezone
+
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
-JWT_ALG = os.getenv("JWT_ALG", "HS256")
-ACCESS_TOKEN_EXPIRE_MIN = int(os.getenv("ACCESS_TOKEN_EXPIRE_MIN", "60"))
+from app.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
 def _pw_bytes_len(pw: str) -> int:
     return len(str(pw).encode("utf-8"))
+
 
 def hash_password(password: str) -> str:
     if password is None:
@@ -24,6 +24,7 @@ def hash_password(password: str) -> str:
 
     return pwd_context.hash(password)
 
+
 def verify_password(password: str, password_hash: str) -> bool:
     if password is None:
         return False
@@ -35,14 +36,23 @@ def verify_password(password: str, password_hash: str) -> bool:
 
     return pwd_context.verify(password, password_hash)
 
-def create_access_token(subject: str) -> str:
-    now = int(time.time())
-    exp = now + ACCESS_TOKEN_EXPIRE_MIN * 60
-    payload = {"sub": subject, "iat": now, "exp": exp}
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+def create_access_token(subject: str, role: str, email: str, expires_minutes: int | None = None) -> str:
+    minutes = expires_minutes if expires_minutes is not None else ACCESS_TOKEN_EXPIRE_MINUTES
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "sub": subject,
+        "role": role,
+        "email": email,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=minutes)).timestamp()),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
 
 def decode_token(token: str) -> dict:
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         raise ValueError("Invalid token")
