@@ -11,6 +11,10 @@ LAST = {
     "response_xml": None,
 }
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.post("/soap")
 async def soap(request: Request):
     xml = (await request.body()).decode("utf-8", errors="ignore")

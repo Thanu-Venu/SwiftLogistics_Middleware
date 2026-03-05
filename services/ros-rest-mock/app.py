@@ -10,6 +10,11 @@ LAST = {
 }
 app = FastAPI(title="ROS REST Mock")
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.post("/optimize-route")
 async def optimize(payload: dict):
     order_id = payload.get("order_id")
