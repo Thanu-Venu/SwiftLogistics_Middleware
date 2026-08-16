@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Dict, List
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -28,9 +29,13 @@ app.include_router(driver_router)
 app.include_router(admin_router)
 
 # ---------------- CORS ----------------
+CORS_ORIGIN_REGEX = os.getenv(
+    "CORS_ORIGIN_REGEX", r"^http://(localhost|127\.0\.0\.1):5173$"
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="^http://.*:5173$",
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

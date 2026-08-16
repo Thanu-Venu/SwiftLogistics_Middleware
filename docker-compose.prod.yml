@@ -1,0 +1,69 @@
+# Production overlay. Use together with the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What this changes vs. local dev:
+#   - Strips every host port publication except the edge proxy's 80/443.
+#     Postgres, RabbitMQ, the three mock services and the API gateway stay
+#     reachable to each other over the internal docker network only — none
+#     of them should ever be dialable from the public internet.
+#   - Swaps the client-portal dev server for a production static build
+#     served by nginx (Dockerfile.prod), built against VITE_API_BASE.
+#   - Adds the `edge` (Caddy) service, the only thing with public ports,
+#     which terminates HTTPS and reverse-proxies to `frontend` and
+#     `api-gateway` by hostname (see Caddyfile).
+#
+# Required in .env before using this file: POSTGRES_PASSWORD,
+# RABBITMQ_PASSWORD, SECRET_KEY, CORS_ORIGIN_REGEX, VITE_API_BASE,
+# FRONTEND_DOMAIN, API_DOMAIN. See .env.example.
+
+services:
+  postgres:
+    ports: !reset []
+
+  rabbitmq:
+    ports: !reset []
+
+  cms-soap-mock:
+    ports: !reset []
+
+  ros-rest-mock:
+    ports: !reset []
+
+  wms-tcp-mock:
+    ports: !reset []
+
+  api-gateway:
+    ports: !reset []
+
+  client-portal:
+    container_name: frontend
+    build:
+      context: ./ui/client-portal
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE: ${VITE_API_BASE}
+    command: !reset []
+    volumes: !reset []
+    ports: !reset []
+
+  edge:
+    image: caddy:2-alpine
+    container_name: edge
+    environment:
+      FRONTEND_DOMAIN: ${FRONTEND_DOMAIN:?Set FRONTEND_DOMAIN in .env}
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - client-portal
+      - api-gateway
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:

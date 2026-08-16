@@ -1,0 +1,14 @@
+# Edge reverse proxy: terminates HTTPS (auto Let's Encrypt certs) for two
+# hostnames and forwards to the internal-only containers behind it.
+# Domains come from FRONTEND_DOMAIN / API_DOMAIN in .env.
+#
+# reverse_proxy handles WebSocket upgrades automatically, so /ws/* on the
+# API domain works with no extra config.
+
+{$FRONTEND_DOMAIN} {
+    reverse_proxy frontend:80
+}
+
+{$API_DOMAIN} {
+    reverse_proxy api-gateway:8000
+}
